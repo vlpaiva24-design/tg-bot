@@ -86,6 +86,7 @@ async def process_type(callback: types.CallbackQuery, state: FSMContext):
     await state.update_data(req_type=callback.data.split("_", 1)[1])
     await callback.message.answer(get_text(callback.from_user, "name"))
     await Form.name.set()
+    await callback.answer()
 
 
 # 🔹 имя
