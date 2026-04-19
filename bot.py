@@ -49,7 +49,6 @@ class Form(StatesGroup):
     text = State()
 
 
-# ✅ ВЕРТИКАЛЬНЫЕ КНОПКИ
 def get_type_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton("Жалоба", callback_data="type_Жалоба")],
@@ -95,7 +94,7 @@ async def start(message: types.Message, state: FSMContext):
 async def process_type(callback: types.CallbackQuery, state: FSMContext):
     await state.update_data(req_type=callback.data.split("_", 1)[1])
 
-    await callback.message.edit_reply_markup()  # 👈 убираем кнопки
+    await callback.message.edit_reply_markup()
 
     await callback.message.answer(get_text(callback.from_user, "name"))
     await Form.name.set()
@@ -103,12 +102,15 @@ async def process_type(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
+# ✅ фикс имени
 @dp.message_handler(state=Form.name, content_types=types.ContentType.TEXT)
 async def get_name(message: types.Message, state: FSMContext):
-    if not message.text or len(message.text.strip()) < 2:
+    name = message.text.strip()
+
+    if not name:
         return
 
-    await state.update_data(name=message.text.strip())
+    await state.update_data(name=name)
 
     await message.answer(
         get_text(message.from_user, "phone"),
@@ -118,14 +120,14 @@ async def get_name(message: types.Message, state: FSMContext):
     await Form.phone.set()
 
 
-# ✅ НОРМАЛЬНО СКРЫВАЕМ КНОПКУ
+# ✅ фикс дубля филиала
 @dp.message_handler(state=Form.phone, content_types=types.ContentType.CONTACT)
 async def get_phone(message: types.Message, state: FSMContext):
     await state.update_data(phone=message.contact.phone_number)
 
     await message.answer(
         get_text(message.from_user, "branch"),
-        reply_markup=ReplyKeyboardRemove()  # 👈 вот здесь правильно
+        reply_markup=ReplyKeyboardRemove()
     )
 
     await message.answer(
@@ -139,13 +141,15 @@ async def get_phone(message: types.Message, state: FSMContext):
 @dp.callback_query_handler(lambda c: c.data and c.data.startswith("branch_"), state="*")
 async def process_branch(callback: types.CallbackQuery, state: FSMContext):
 
-    await callback.message.edit_reply_markup()  # 👈 убираем кнопки
+    await callback.message.edit_reply_markup()
 
     if callback.data == "branch_custom":
         await callback.message.answer(get_text(callback.from_user, "custom_branch"))
         await Form.custom_branch.set()
     else:
-        await state.update_data(branch=callback.data.split("_", 1)[1])
+        branch = callback.data.split("_", 1)[1]
+        await state.update_data(branch=branch)
+
         await callback.message.answer(get_text(callback.from_user, "text"))
         await Form.text.set()
 
@@ -159,8 +163,14 @@ async def custom_branch(message: types.Message, state: FSMContext):
     await Form.text.set()
 
 
-@dp.message_handler(state=Form.text)
+# ✅ фикс текста (чтобы всегда срабатывал)
+@dp.message_handler(state=Form.text, content_types=types.ContentType.TEXT)
 async def finish(message: types.Message, state: FSMContext):
+    text = message.text.strip()
+
+    if not text:
+        return
+
     data = await state.get_data()
 
     save_request(
@@ -169,7 +179,7 @@ async def finish(message: types.Message, state: FSMContext):
         phone=data["phone"],
         req_type=data["req_type"],
         branch=data["branch"],
-        text=message.text
+        text=text
     )
 
     text_msg = f"""
@@ -181,7 +191,7 @@ async def finish(message: types.Message, state: FSMContext):
 🏢 Филиал: {data['branch']}
 
 📝 Текст:
-{message.text}
+{text}
 """
 
     await bot.send_message(ADMIN_CHAT_ID, text_msg)
