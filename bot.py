@@ -14,14 +14,13 @@ from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from db import save_request
 
 
-TOKEN = os.getenv("BOT_TOKEN")  # берём из Render
+TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_CHAT_ID = -5221185330
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher(bot, storage=MemoryStorage())
 
 
-# 🔹 Тексты
 TEXTS = {
     "ru": {
         "start": "Привет! Это компания SmokeZone 👋\n\nВы можете оставить:\nжалобу, предложение или другое обращение.\n\nВыберите тип обращения 👇",
@@ -40,7 +39,6 @@ def get_text(user, key):
     return TEXTS["ru"][key]
 
 
-# 🔹 Состояния
 class Form(StatesGroup):
     req_type = State()
     name = State()
@@ -50,7 +48,6 @@ class Form(StatesGroup):
     text = State()
 
 
-# 🔹 Кнопки
 def get_type_kb():
     return InlineKeyboardMarkup().add(
         InlineKeyboardButton("Жалоба", callback_data="type_Жалоба"),
@@ -72,7 +69,6 @@ contact_kb = ReplyKeyboardMarkup(resize_keyboard=True).add(
 )
 
 
-# 🔹 старт
 @dp.message_handler(commands=["start"])
 async def start(message: types.Message, state: FSMContext):
     await state.finish()
@@ -80,16 +76,14 @@ async def start(message: types.Message, state: FSMContext):
     await Form.req_type.set()
 
 
-# 🔹 тип обращения
 @dp.callback_query_handler(lambda c: c.data.startswith("type_"))
 async def process_type(callback: types.CallbackQuery, state: FSMContext):
     await state.update_data(req_type=callback.data.split("_", 1)[1])
     await callback.message.answer(get_text(callback.from_user, "name"))
     await Form.name.set()
-    await callback.answer()
+    await callback.answer()   # ✅ было ок
 
 
-# 🔹 имя
 @dp.message_handler(state=Form.name)
 async def get_name(message: types.Message, state: FSMContext):
     await state.update_data(name=message.text)
@@ -97,7 +91,6 @@ async def get_name(message: types.Message, state: FSMContext):
     await Form.phone.set()
 
 
-# 🔹 телефон
 @dp.message_handler(state=Form.phone, content_types=types.ContentType.CONTACT)
 async def get_phone(message: types.Message, state: FSMContext):
     await state.update_data(phone=message.contact.phone_number)
@@ -105,7 +98,6 @@ async def get_phone(message: types.Message, state: FSMContext):
     await Form.branch.set()
 
 
-# 🔹 филиал
 @dp.callback_query_handler(lambda c: c.data.startswith("branch_"), state=Form.branch)
 async def process_branch(callback: types.CallbackQuery, state: FSMContext):
     if callback.data == "branch_custom":
@@ -116,8 +108,9 @@ async def process_branch(callback: types.CallbackQuery, state: FSMContext):
         await callback.message.answer(get_text(callback.from_user, "text"))
         await Form.text.set()
 
+    await callback.answer()   # ✅ ДОБАВИЛ
 
-# 🔹 кастом филиал
+
 @dp.message_handler(state=Form.custom_branch)
 async def custom_branch(message: types.Message, state: FSMContext):
     await state.update_data(branch=message.text)
@@ -125,7 +118,6 @@ async def custom_branch(message: types.Message, state: FSMContext):
     await Form.text.set()
 
 
-# 🔹 финал
 @dp.message_handler(state=Form.text)
 async def finish(message: types.Message, state: FSMContext):
     data = await state.get_data()
@@ -145,8 +137,7 @@ async def finish(message: types.Message, state: FSMContext):
     await state.finish()
 
 
-# 🔹 запуск
 if __name__ == "__main__":
     print("Бот запущен...")
     from aiogram import executor
-    executor.start_polling(dp, skip_updates=True)
+    executor.start_polling(dp)   # ✅ убрал skip_updates
