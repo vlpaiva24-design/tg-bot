@@ -61,7 +61,11 @@ def get_type_kb():
 def get_branch_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton("Корзинка Сайрам", callback_data="branch_Корзинка Сайрам")],
+        [InlineKeyboardButton("Корзинка Салом", callback_data="branch_Корзинка Салом")],
+        [InlineKeyboardButton("Корзинка Малика", callback_data="branch_Корзинка Малика")],
+        [InlineKeyboardButton("Корзинка Петушок", callback_data="branch_Корзинка Петушок")],
         [InlineKeyboardButton("Транспортный (Хавас)", callback_data="branch_Транспортный (Хавас)")],
+        [InlineKeyboardButton("Ташкент Маркет (Кристал)", callback_data="branch_Ташкент Маркет (Кристал)")],
         [InlineKeyboardButton("Написать ориентир", callback_data="branch_custom")]
     ])
 
@@ -99,10 +103,18 @@ async def process_type(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@dp.message_handler(state=Form.name)
+@dp.message_handler(state=Form.name, content_types=types.ContentType.TEXT)
 async def get_name(message: types.Message, state: FSMContext):
-    await state.update_data(name=message.text)
-    await message.answer(get_text(message.from_user, "phone"), reply_markup=contact_kb)
+    if not message.text or len(message.text.strip()) < 2:
+        return
+
+    await state.update_data(name=message.text.strip())
+
+    await message.answer(
+        get_text(message.from_user, "phone"),
+        reply_markup=contact_kb
+    )
+
     await Form.phone.set()
 
 
