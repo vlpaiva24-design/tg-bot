@@ -1,24 +1,24 @@
 import asyncio
 import os
-
 from aiogram import Bot, Dispatcher, types
+from aiogram.filters import Command
 from aiogram.types import (
     InlineKeyboardMarkup, InlineKeyboardButton,
     ReplyKeyboardMarkup, KeyboardButton,
     ReplyKeyboardRemove
 )
-from aiogram.dispatcher import FSMContext
-from aiogram.dispatcher.filters.state import StatesGroup, State
-from aiogram.contrib.fsm_storage.memory import MemoryStorage
+from aiogram.fsm.state import StatesGroup, State
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.storage.memory import MemoryStorage
 
 from db import save_request
 
 
-TOKEN = os.getenv("BOT_TOKEN")
+TOKEN = os.getenv("BOT_TOKEN")  # ✅ теперь из Render
 ADMIN_CHAT_ID = -5221185330
 
 bot = Bot(token=TOKEN)
-dp = Dispatcher(bot, storage=MemoryStorage())
+dp = Dispatcher(storage=MemoryStorage())
 
 
 TEXTS = {
@@ -36,7 +36,8 @@ TEXTS = {
 
 
 def get_text(user, key):
-    return TEXTS["ru"][key]
+    lang = user.language_code
+    return TEXTS.get(lang, TEXTS["ru"])[key]
 
 
 class Form(StatesGroup):
@@ -50,116 +51,123 @@ class Form(StatesGroup):
 
 def get_type_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton("Жалоба", callback_data="type_Жалоба")],
-        [InlineKeyboardButton("Предложение", callback_data="type_Предложение")],
-        [InlineKeyboardButton("Другое", callback_data="type_Другое")]
+        [InlineKeyboardButton(text="Жалоба", callback_data="type_Жалоба")],
+        [InlineKeyboardButton(text="Предложение", callback_data="type_Предложение")],
+        [InlineKeyboardButton(text="Другое", callback_data="type_Другое")]
     ])
 
 
 def get_branch_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton("Корзинка Сайрам", callback_data="branch_Корзинка Сайрам")],
-        [InlineKeyboardButton("Корзинка Салом", callback_data="branch_Корзинка Салом")],
-        [InlineKeyboardButton("Корзинка Малика", callback_data="branch_Корзинка Малика")],
-        [InlineKeyboardButton("Корзинка Петушок", callback_data="branch_Корзинка Петушок")],
-        [InlineKeyboardButton("Транспортный (Хавас)", callback_data="branch_Транспортный (Хавас)")],
-        [InlineKeyboardButton("Ташкент Маркет (Кристал)", callback_data="branch_Ташкент Маркет (Кристал)")],
-        [InlineKeyboardButton("Написать ориентир", callback_data="branch_custom")]
+        [InlineKeyboardButton(text="Корзинка Сайрам", callback_data="branch_Корзинка Сайрам")],
+        [InlineKeyboardButton(text="Корзинка Салом", callback_data="branch_Корзинка Салом")],
+        [InlineKeyboardButton(text="Корзинка Малика", callback_data="branch_Корзинка Малика")],
+        [InlineKeyboardButton(text="Корзинка Петушок", callback_data="branch_Корзинка Петушок")],
+        [InlineKeyboardButton(text="Транспортный (Хавас)", callback_data="branch_Транспортный (Хавас)")],
+        [InlineKeyboardButton(text="Ташкент Маркет (Кристал)", callback_data="branch_Ташкент Маркет (Кристал)")],
+        [InlineKeyboardButton(text="Написать ориентир", callback_data="branch_custom")]
     ])
 
 
 def restart_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton("Оставить ещё обращение", callback_data="restart")]
+        [InlineKeyboardButton(text="Оставить ещё обращение", callback_data="restart")]
     ])
 
 
 contact_kb = ReplyKeyboardMarkup(
+    keyboard=[[KeyboardButton(text="Поделиться номером", request_contact=True)]],
     resize_keyboard=True,
     one_time_keyboard=True
-).add(
-    KeyboardButton("Поделиться номером", request_contact=True)
 )
 
 
-@dp.message_handler(commands=["start"], state="*")
+async def start_flow(message: types.Message, state: FSMContext):
+    await state.clear()
+
+    await message.answer(
+        get_text(message.from_user, "start"),
+        reply_markup=get_type_kb()
+    )
+
+    await state.set_state(Form.req_type)
+
+
+@dp.message(Command("start"))
 async def start(message: types.Message, state: FSMContext):
-    await state.finish()
-    await message.answer(get_text(message.from_user, "start"), reply_markup=get_type_kb())
-    await Form.req_type.set()
+    await start_flow(message, state)
 
 
-# ❗ УБРАЛ state="*" — ВАЖНО
-@dp.callback_query_handler(lambda c: c.data.startswith("type_"), state=Form.req_type)
+@dp.callback_query(lambda c: c.data.startswith("type_"))
 async def process_type(callback: types.CallbackQuery, state: FSMContext):
-    await state.update_data(req_type=callback.data.split("_", 1)[1])
+    req_type = callback.data.split("_", 1)[1]
+
+    await state.update_data(req_type=req_type)
+
     await callback.message.edit_reply_markup()
     await callback.message.answer(get_text(callback.from_user, "name"))
-    await Form.name.set()
+
+    await state.set_state(Form.name)
     await callback.answer()
 
 
-@dp.message_handler(state=Form.name, content_types=types.ContentType.TEXT)
+@dp.message(Form.name)
 async def get_name(message: types.Message, state: FSMContext):
-    name = message.text.strip()
-    if not name:
-        return
-
-    await state.update_data(name=name)
-    await Form.phone.set()
+    await state.update_data(name=message.text)
 
     await message.answer(
         get_text(message.from_user, "phone"),
         reply_markup=contact_kb
     )
 
+    await state.set_state(Form.phone)
 
-@dp.message_handler(state=Form.phone, content_types=types.ContentType.CONTACT)
+
+@dp.message(Form.phone)
 async def get_phone(message: types.Message, state: FSMContext):
-    await state.update_data(phone=message.contact.phone_number)
+    if not message.contact:
+        await message.answer(get_text(message.from_user, "phone"))
+        return
 
-    await message.answer(
-        get_text(message.from_user, "branch"),
-        reply_markup=ReplyKeyboardRemove()
-    )
+    await state.update_data(phone=message.contact.phone_number)
 
     await message.answer(
         get_text(message.from_user, "branch"),
         reply_markup=get_branch_kb()
     )
 
-    await Form.branch.set()
+    await state.set_state(Form.branch)
 
 
-# ❗ УБРАЛ state="*"
-@dp.callback_query_handler(lambda c: c.data.startswith("branch_"), state=Form.branch)
+@dp.callback_query(lambda c: c.data.startswith("branch_"))
 async def process_branch(callback: types.CallbackQuery, state: FSMContext):
+    data = callback.data
+
     await callback.message.edit_reply_markup()
 
-    if callback.data == "branch_custom":
+    if data == "branch_custom":
         await callback.message.answer(get_text(callback.from_user, "custom_branch"))
-        await Form.custom_branch.set()
+        await state.set_state(Form.custom_branch)
     else:
-        await state.update_data(branch=callback.data.split("_", 1)[1])
+        branch = data.split("_", 1)[1]
+        await state.update_data(branch=branch)
+
         await callback.message.answer(get_text(callback.from_user, "text"))
-        await Form.text.set()
+        await state.set_state(Form.text)
 
     await callback.answer()
 
 
-@dp.message_handler(state=Form.custom_branch, content_types=types.ContentType.TEXT)
+@dp.message(Form.custom_branch)
 async def custom_branch(message: types.Message, state: FSMContext):
     await state.update_data(branch=message.text)
+
     await message.answer(get_text(message.from_user, "text"))
-    await Form.text.set()
+    await state.set_state(Form.text)
 
 
-@dp.message_handler(state=Form.text, content_types=types.ContentType.TEXT)
-async def finish(message: types.Message, state: FSMContext):
-    text = message.text.strip()
-    if not text:
-        return
-
+@dp.message(Form.text)
+async def get_text_handler(message: types.Message, state: FSMContext):
     data = await state.get_data()
 
     save_request(
@@ -168,7 +176,7 @@ async def finish(message: types.Message, state: FSMContext):
         phone=data["phone"],
         req_type=data["req_type"],
         branch=data["branch"],
-        text=text
+        text=message.text
     )
 
     text_msg = f"""
@@ -180,7 +188,7 @@ async def finish(message: types.Message, state: FSMContext):
 🏢 Филиал: {data['branch']}
 
 📝 Текст:
-{text}
+{message.text}
 """
 
     await bot.send_message(ADMIN_CHAT_ID, text_msg)
@@ -188,16 +196,19 @@ async def finish(message: types.Message, state: FSMContext):
     await message.answer(get_text(message.from_user, "done"))
     await message.answer(get_text(message.from_user, "again"), reply_markup=restart_kb())
 
-    await state.finish()
+    await state.clear()
 
 
-@dp.callback_query_handler(lambda c: c.data == "restart", state="*")
+@dp.callback_query(lambda c: c.data == "restart")
 async def restart(callback: types.CallbackQuery, state: FSMContext):
-    await start(callback.message, state)
+    await start_flow(callback.message, state)
     await callback.answer()
 
 
-if __name__ == "__main__":
+async def main():
     print("Бот запущен...")
-    from aiogram import executor
-    executor.start_polling(dp)
+    await dp.start_polling(bot)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
