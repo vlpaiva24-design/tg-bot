@@ -12,9 +12,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 
 from db import save_request
 
-import os
-
-TOKEN = os.getenv("BOT_TOKEN")
+TOKEN = "8636688716:AAEZfqSVjKGFIP1KbiNDopwXB6W0sfewQ8o"
 ADMIN_CHAT_ID = -5221185330  # ВСТАВЬ СВОЙ ID
 
 bot = Bot(token=TOKEN)
