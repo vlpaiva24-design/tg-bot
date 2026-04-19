@@ -110,10 +110,10 @@ async def get_name(message: types.Message, state: FSMContext):
     if not name:
         return
 
-    # 🔥 сразу переключаем состояние ПЕРЕД ответом
-    await Form.phone.set()
-
     await state.update_data(name=name)
+
+    # 🔥 правильное переключение состояния
+    await state.set_state(Form.phone.state)
 
     await message.answer(
         get_text(message.from_user, "phone"),
@@ -152,7 +152,7 @@ async def process_branch(callback: types.CallbackQuery, state: FSMContext):
         await state.update_data(branch=branch)
 
         await callback.message.answer(get_text(callback.from_user, "text"))
-        await Form.text.set()
+        await state.set_state(Form.text.state)
 
     await callback.answer()
 
@@ -161,7 +161,7 @@ async def process_branch(callback: types.CallbackQuery, state: FSMContext):
 async def custom_branch(message: types.Message, state: FSMContext):
     await state.update_data(branch=message.text)
     await message.answer(get_text(message.from_user, "text"))
-    await Form.text.set()
+    await state.set_state(Form.text.state)
 
 
 # ✅ фикс текста (чтобы всегда срабатывал)
