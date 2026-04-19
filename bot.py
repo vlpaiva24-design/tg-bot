@@ -105,6 +105,12 @@ async def process_type(callback: types.CallbackQuery, state: FSMContext):
 # ✅ фикс имени
 @dp.message_handler(state=Form.name, content_types=types.ContentType.TEXT)
 async def get_name(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+
+    # 🔥 если имя уже есть — игнорим повтор
+    if "name" in data:
+        return
+
     name = message.text.strip()
 
     if not name:
