@@ -49,7 +49,7 @@ class Form(StatesGroup):
     text = State()
 
 
-# ✅ кнопки теперь В СТОЛБИК
+# ✅ ВЕРТИКАЛЬНЫЕ КНОПКИ
 def get_type_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton("Жалоба", callback_data="type_Жалоба")],
@@ -66,7 +66,6 @@ def get_branch_kb():
     ])
 
 
-# ✅ кнопка "ещё раз"
 def restart_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton("Оставить ещё обращение", callback_data="restart")]
@@ -88,11 +87,15 @@ async def start(message: types.Message, state: FSMContext):
     await Form.req_type.set()
 
 
-@dp.callback_query_handler(lambda c: c.data.startswith("type_"), state="*")
+@dp.callback_query_handler(lambda c: c.data and c.data.startswith("type_"), state="*")
 async def process_type(callback: types.CallbackQuery, state: FSMContext):
     await state.update_data(req_type=callback.data.split("_", 1)[1])
+
+    await callback.message.edit_reply_markup()  # 👈 убираем кнопки
+
     await callback.message.answer(get_text(callback.from_user, "name"))
     await Form.name.set()
+
     await callback.answer()
 
 
@@ -103,24 +106,29 @@ async def get_name(message: types.Message, state: FSMContext):
     await Form.phone.set()
 
 
-# ✅ скрываем кнопку после отправки номера
+# ✅ НОРМАЛЬНО СКРЫВАЕМ КНОПКУ
 @dp.message_handler(state=Form.phone, content_types=types.ContentType.CONTACT)
 async def get_phone(message: types.Message, state: FSMContext):
     await state.update_data(phone=message.contact.phone_number)
 
     await message.answer(
         get_text(message.from_user, "branch"),
-        reply_markup=get_branch_kb()
+        reply_markup=ReplyKeyboardRemove()  # 👈 вот здесь правильно
     )
 
-    # 🔥 вот это скрывает кнопку
-    await message.answer(" ", reply_markup=ReplyKeyboardRemove())
+    await message.answer(
+        get_text(message.from_user, "branch"),
+        reply_markup=get_branch_kb()
+    )
 
     await Form.branch.set()
 
 
-@dp.callback_query_handler(lambda c: c.data.startswith("branch_"), state="*")
+@dp.callback_query_handler(lambda c: c.data and c.data.startswith("branch_"), state="*")
 async def process_branch(callback: types.CallbackQuery, state: FSMContext):
+
+    await callback.message.edit_reply_markup()  # 👈 убираем кнопки
+
     if callback.data == "branch_custom":
         await callback.message.answer(get_text(callback.from_user, "custom_branch"))
         await Form.custom_branch.set()
@@ -139,7 +147,6 @@ async def custom_branch(message: types.Message, state: FSMContext):
     await Form.text.set()
 
 
-# ✅ нормальный формат сообщения в группу
 @dp.message_handler(state=Form.text)
 async def finish(message: types.Message, state: FSMContext):
     data = await state.get_data()
@@ -173,7 +180,6 @@ async def finish(message: types.Message, state: FSMContext):
     await state.finish()
 
 
-# ✅ рестарт
 @dp.callback_query_handler(lambda c: c.data == "restart", state="*")
 async def restart(callback: types.CallbackQuery, state: FSMContext):
     await start(callback.message, state)
