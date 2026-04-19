@@ -76,7 +76,7 @@ async def start(message: types.Message, state: FSMContext):
     await Form.req_type.set()
 
 
-@dp.callback_query_handler(lambda c: c.data.startswith("type_"))
+@dp.callback_query_handler(lambda c: c.data and c.data.startswith("type_"), state="*")
 async def process_type(callback: types.CallbackQuery, state: FSMContext):
     await state.update_data(req_type=callback.data.split("_", 1)[1])
     await callback.message.answer(get_text(callback.from_user, "name"))
@@ -98,7 +98,7 @@ async def get_phone(message: types.Message, state: FSMContext):
     await Form.branch.set()
 
 
-@dp.callback_query_handler(lambda c: c.data.startswith("branch_"), state=Form.branch)
+@dp.callback_query_handler(lambda c: c.data and c.data.startswith("branch_"), state="*")
 async def process_branch(callback: types.CallbackQuery, state: FSMContext):
     if callback.data == "branch_custom":
         await callback.message.answer(get_text(callback.from_user, "custom_branch"))
