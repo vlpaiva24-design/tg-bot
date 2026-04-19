@@ -105,16 +105,13 @@ async def process_type(callback: types.CallbackQuery, state: FSMContext):
 # ✅ фикс имени
 @dp.message_handler(state=Form.name, content_types=types.ContentType.TEXT)
 async def get_name(message: types.Message, state: FSMContext):
-    data = await state.get_data()
-
-    # 🔥 если имя уже есть — игнорим повтор
-    if "name" in data:
-        return
-
     name = message.text.strip()
 
     if not name:
         return
+
+    # 🔥 сразу переключаем состояние ПЕРЕД ответом
+    await Form.phone.set()
 
     await state.update_data(name=name)
 
@@ -122,8 +119,6 @@ async def get_name(message: types.Message, state: FSMContext):
         get_text(message.from_user, "phone"),
         reply_markup=contact_kb
     )
-
-    await Form.phone.set()
 
 
 # ✅ фикс дубля филиала
@@ -178,6 +173,12 @@ async def finish(message: types.Message, state: FSMContext):
         return
 
     data = await state.get_data()
+
+    # 🔥 если вдруг состояние слетело — не падаем
+    if not all(k in data for k in ["name", "phone", "req_type", "branch"]):
+        await message.answer("Произошла ошибка, начните заново /start")
+        await state.finish()
+        return
 
     save_request(
         user_id=message.from_user.id,
