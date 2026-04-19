@@ -2,7 +2,6 @@ import asyncio
 import os
 
 from aiogram import Bot, Dispatcher, types
-from aiogram.dispatcher.filters import Command
 from aiogram.types import (
     InlineKeyboardMarkup, InlineKeyboardButton,
     ReplyKeyboardMarkup, KeyboardButton,
@@ -83,37 +82,31 @@ contact_kb = ReplyKeyboardMarkup(
 )
 
 
-@dp.message_handler(commands=["start"])
+@dp.message_handler(commands=["start"], state="*")
 async def start(message: types.Message, state: FSMContext):
     await state.finish()
     await message.answer(get_text(message.from_user, "start"), reply_markup=get_type_kb())
     await Form.req_type.set()
 
 
-@dp.callback_query_handler(lambda c: c.data and c.data.startswith("type_"), state="*")
+# ❗ УБРАЛ state="*" — ВАЖНО
+@dp.callback_query_handler(lambda c: c.data.startswith("type_"), state=Form.req_type)
 async def process_type(callback: types.CallbackQuery, state: FSMContext):
     await state.update_data(req_type=callback.data.split("_", 1)[1])
-
     await callback.message.edit_reply_markup()
-
     await callback.message.answer(get_text(callback.from_user, "name"))
     await Form.name.set()
-
     await callback.answer()
 
 
-# ✅ фикс имени
 @dp.message_handler(state=Form.name, content_types=types.ContentType.TEXT)
 async def get_name(message: types.Message, state: FSMContext):
     name = message.text.strip()
-
     if not name:
         return
 
     await state.update_data(name=name)
-
-    # 🔥 правильное переключение состояния
-    await state.set_state(Form.phone.state)
+    await Form.phone.set()
 
     await message.answer(
         get_text(message.from_user, "phone"),
@@ -121,7 +114,6 @@ async def get_name(message: types.Message, state: FSMContext):
     )
 
 
-# ✅ фикс дубля филиала
 @dp.message_handler(state=Form.phone, content_types=types.ContentType.CONTACT)
 async def get_phone(message: types.Message, state: FSMContext):
     await state.update_data(phone=message.contact.phone_number)
@@ -139,46 +131,36 @@ async def get_phone(message: types.Message, state: FSMContext):
     await Form.branch.set()
 
 
-@dp.callback_query_handler(lambda c: c.data and c.data.startswith("branch_"), state="*")
+# ❗ УБРАЛ state="*"
+@dp.callback_query_handler(lambda c: c.data.startswith("branch_"), state=Form.branch)
 async def process_branch(callback: types.CallbackQuery, state: FSMContext):
-
     await callback.message.edit_reply_markup()
 
     if callback.data == "branch_custom":
         await callback.message.answer(get_text(callback.from_user, "custom_branch"))
         await Form.custom_branch.set()
     else:
-        branch = callback.data.split("_", 1)[1]
-        await state.update_data(branch=branch)
-
+        await state.update_data(branch=callback.data.split("_", 1)[1])
         await callback.message.answer(get_text(callback.from_user, "text"))
-        await state.set_state(Form.text.state)
+        await Form.text.set()
 
     await callback.answer()
 
 
-@dp.message_handler(state=Form.custom_branch)
+@dp.message_handler(state=Form.custom_branch, content_types=types.ContentType.TEXT)
 async def custom_branch(message: types.Message, state: FSMContext):
     await state.update_data(branch=message.text)
     await message.answer(get_text(message.from_user, "text"))
-    await state.set_state(Form.text.state)
+    await Form.text.set()
 
 
-# ✅ фикс текста (чтобы всегда срабатывал)
 @dp.message_handler(state=Form.text, content_types=types.ContentType.TEXT)
 async def finish(message: types.Message, state: FSMContext):
     text = message.text.strip()
-
     if not text:
         return
 
     data = await state.get_data()
-
-    # 🔥 если вдруг состояние слетело — не падаем
-    if not all(k in data for k in ["name", "phone", "req_type", "branch"]):
-        await message.answer("Произошла ошибка, начните заново /start")
-        await state.finish()
-        return
 
     save_request(
         user_id=message.from_user.id,
